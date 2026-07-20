@@ -65,7 +65,22 @@ async function bootstrap() {
     return showLoginScreen();
   }
   showApp(me);
-  loadPlayRoulettes();
+  await loadPlayRoulettes();
+  await joinLobbyFromLink();
+}
+
+async function joinLobbyFromLink() {
+  const matchId = new URLSearchParams(location.search).get('match');
+  if (!matchId) return;
+  let match;
+  try {
+    match = await api(`/matches/${matchId}`);
+  } catch {
+    return;
+  }
+  if (match.status !== 'waiting') return;
+  currentMatch = match;
+  enterLobby();
 }
 
 // --- Tabs ---
@@ -197,6 +212,7 @@ async function loadRouletteGames(id) {
       } else {
         await api(`/roulettes/${id}/games/${g.id}`, { method: 'DELETE' });
       }
+      loadRouletteGames(id);
     };
     container.appendChild(chip);
   }
@@ -467,6 +483,8 @@ document.getElementById('play-start').onclick = async () => {
 
 let lobbyPollTimer = null;
 
+const isLeaderUser = () => currentUser?.role === 'leader';
+
 function enterLobby() {
   document.getElementById('play-setup').classList.add('hidden');
   document.getElementById('play-lobby').classList.remove('hidden');
@@ -474,9 +492,47 @@ function enterLobby() {
   document.getElementById('play-actions').innerHTML = '';
   document.getElementById('play-state').textContent = '';
   renderLobby();
+  updateCancelVisibility();
   clearInterval(lobbyPollTimer);
   lobbyPollTimer = setInterval(refreshLobby, 3000);
 }
+
+function updateCancelVisibility() {
+  const show = isLeaderUser() && currentMatch && (currentMatch.status === 'waiting' || currentMatch.status === 'in_progress');
+  document.getElementById('cancel-match-btn').classList.toggle('hidden', !show);
+}
+
+function resetPlayStage() {
+  clearInterval(lobbyPollTimer);
+  currentMatch = null;
+  wheelGames = [];
+  document.getElementById('play-setup').classList.remove('hidden');
+  document.getElementById('play-lobby').classList.add('hidden');
+  document.querySelector('.wheel-stage').classList.add('hidden');
+  document.getElementById('play-actions').innerHTML = '';
+  document.getElementById('play-state').textContent = '';
+  document.getElementById('cancel-match-btn').classList.add('hidden');
+  loadPlayRoulettes();
+}
+
+document.getElementById('cancel-match-btn').onclick = async () => {
+  if (!currentMatch || !confirm('Cancel this match?')) return;
+  try {
+    await api(`/matches/${currentMatch.id}/cancel`, { method: 'POST' });
+  } catch (err) {
+    return alert(err.message);
+  }
+  resetPlayStage();
+};
+
+document.getElementById('lobby-link').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(`${location.origin}/?match=${currentMatch.id}`);
+    alert('Lobby link copied to clipboard!');
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
 async function refreshLobby() {
   currentMatch = await api(`/matches/${currentMatch.id}`);
@@ -495,6 +551,7 @@ function renderLobby() {
   const joined = currentMatch.players.some((p) => p.id === currentUser.id);
   document.getElementById('lobby-join').classList.toggle('hidden', joined);
   document.getElementById('lobby-start').disabled = currentMatch.players.length === 0;
+  document.getElementById('lobby-link').classList.toggle('hidden', !isLeaderUser());
 }
 
 document.getElementById('lobby-join').onclick = async () => {
@@ -526,6 +583,7 @@ document.getElementById('lobby-start').onclick = async () => {
   void wheel.offsetHeight;
   wheel.style.transition = '';
   document.getElementById('play-state').textContent = 'Match started. Spin!';
+  updateCancelVisibility();
   renderPlayActions();
 };
 
@@ -686,6 +744,11 @@ async function resolveMatch(payload, eliminatedGame) {
   if (currentMatch.status === 'complete') {
     document.getElementById('play-state').textContent = 'Match complete!';
     triggerWinEffect();
+    updateCancelVisibility();
+    const again = document.createElement('button');
+    again.textContent = 'Play Another Roulette';
+    again.onclick = resetPlayStage;
+    document.getElementById('play-actions').appendChild(again);
   } else {
     document.getElementById('play-state').textContent = 'Resolved. Spin again!';
     renderPlayActions();

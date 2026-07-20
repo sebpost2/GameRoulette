@@ -39,7 +39,20 @@ cba4d49 Disable Vercel's Express auto-detection
 2591a6e Initial commit: Game Roulette
 ```
 
-Working tree is clean as of this handoff (no uncommitted changes). No GitHub remote configured. The last `vercel --prod` deploy included the empty-states + promote/demote + security-hardening commit (`dfb96ec`) but **not** the lobby backend work (`849b0de`/`cb2e9df`) — those haven't been deployed since the frontend doesn't support them yet.
+Working tree is clean as of this handoff (no uncommitted changes). No GitHub remote configured. The `vercel --prod` deploy now includes the full lobby feature (backend + frontend, through `56730db`) — live at <https://game-roulette-psi.vercel.app> — that deploy predates the cancel/replay/share-link work below, redeploy when ready.
+
+## Lobby cancel, replay, and share link
+
+Follow-up session after the lobby feature above. Three gaps the user reported after using the lobby: no way to cancel a match short of reloading, no way to start a new match after one completes without reloading, and no shareable link when opening a lobby.
+
+- **Backend**: `POST /api/matches/:id/cancel` (`src/app.js`), leader-only (`requireLeader`, mirrors other CRUD routes). Allowed from `'waiting'` or `'in_progress'`, sets `status = 'cancelled'`; 409 if already `'complete'`/`'cancelled'`, 404 if unknown. TDD'd in `test/match.test.js` (`Match cancel (leader-only)` describe block, 6 tests) — RED/GREEN checkpoint commits `d81acb3`/`daed42b`.
+- **Frontend** (`public/app.js` + `public/index.html`, uncommitted as of this note):
+  - `#cancel-match-btn` — persistent button, leader-only (checked in JS via `isLeaderUser()`, not the global `.leader-only` class — that class is driven purely by role in `showApp()` and would fight with the match-status-based visibility here), shown whenever `currentMatch` is `waiting`/`in_progress`. Calls `resetPlayStage()` on confirm.
+  - `resetPlayStage()` — the shared "back to setup" reset: stops lobby polling, clears `currentMatch`/`wheelGames`, re-shows `#play-setup`, hides `#play-lobby`/`.wheel-stage`/cancel button, reloads the roulette dropdown. Used by both cancel and the new "Play Another Roulette" button that `resolveMatch()` renders into `#play-actions` once `status === 'complete'`.
+  - `#lobby-link` — leader-only, visible only in the lobby stage. Copies `${location.origin}/?match=<id>` to the clipboard (mirrors the existing `invite-btn` clipboard pattern).
+  - `bootstrap()` now reads `?match=<id>` from the URL (`joinLobbyFromLink()`); if that match exists and is still `'waiting'`, it jumps straight into `enterLobby()` instead of the normal setup screen. If the match already started/ended/doesn't exist, it silently falls through to normal setup — no attempt to resume as a spectator into an in-progress match (that's out of scope, flagged in the original plan).
+  - Manually verified via the Playwright-mocked-`/api/*` technique (no real second Discord account available): cancel-from-lobby returns to setup, cancel-from-in-progress returns to setup, complete → "Play Another Roulette" → setup, copy-link writes the expected URL to clipboard, and `?match=<id>` for a waiting match jumps straight into that lobby.
+- **Known follow-up**: a GitHub Actions bot flagged a possible "authorization-bypass in src/app.js" on the cancel-endpoint commit via an automated background review, but the review's own output was malformed/unreadable beyond that one-line summary. Manual re-check of the diff (route registered after `app.use('/api', requireAuth)`, gated with `requireLeader` same as every other leader-only route) didn't turn up an actual issue — flagged here in case it resurfaces with better detail next session.
 
 ## What's built (all TDD'd, 89/89 passing)
 
