@@ -389,3 +389,85 @@ describe('Match lobby (join before start)', () => {
     assert.equal(skip.status, 200);
   });
 });
+
+describe('Match cancel (leader-only)', () => {
+  test('a leader can cancel a waiting match', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Cancel', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+
+    const cancel = await jsonReq(`/api/matches/${match.body.id}/cancel`, { method: 'POST' });
+    assert.equal(cancel.status, 200);
+    assert.equal(cancel.body.status, 'cancelled');
+  });
+
+  test('a leader can cancel an in-progress match', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Cancel', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    await startMatch(match.body.id);
+
+    const cancel = await jsonReq(`/api/matches/${match.body.id}/cancel`, { method: 'POST' });
+    assert.equal(cancel.status, 200);
+    assert.equal(cancel.body.status, 'cancelled');
+  });
+
+  test('rejects cancelling a match that already completed', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Cancel', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    await startMatch(match.body.id);
+    rngQueue = [0];
+    await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
+    await jsonReq(`/api/matches/${match.body.id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome: 'confirm_win' }),
+    });
+
+    const cancel = await jsonReq(`/api/matches/${match.body.id}/cancel`, { method: 'POST' });
+    assert.equal(cancel.status, 409);
+  });
+
+  test('rejects cancelling a match twice', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Cancel', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    await jsonReq(`/api/matches/${match.body.id}/cancel`, { method: 'POST' });
+
+    const cancel2 = await jsonReq(`/api/matches/${match.body.id}/cancel`, { method: 'POST' });
+    assert.equal(cancel2.status, 409);
+  });
+
+  test('rejects cancelling from a non-leader player', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Cancel', [gA.id]);
+    const member = await makePlayer('Member', 1);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+
+    const cancel = await jsonReq(`/api/matches/${match.body.id}/cancel`, {
+      method: 'POST',
+      headers: { cookie: sessionCookieFor(member.id) },
+    });
+    assert.equal(cancel.status, 403);
+  });
+
+  test('returns 404 cancelling an unknown match', async () => {
+    const cancel = await jsonReq('/api/matches/999/cancel', { method: 'POST' });
+    assert.equal(cancel.status, 404);
+  });
+});
