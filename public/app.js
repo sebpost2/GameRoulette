@@ -92,6 +92,8 @@ async function loadGames() {
   const games = await api('/games');
   const tbody = document.querySelector('#games-table tbody');
   tbody.innerHTML = '';
+  document.getElementById('games-table').classList.toggle('hidden', games.length === 0);
+  document.getElementById('games-empty').classList.toggle('hidden', games.length > 0);
   for (const g of games) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td data-label="Title">${esc(g.title)}</td><td data-label="Steam AppID">${esc(g.steam_appid)}</td><td></td>`;
@@ -162,7 +164,10 @@ async function loadRoulettes() {
   const roulettes = await api('/roulettes');
   const select = document.getElementById('roulette-select');
   select.innerHTML = roulettes.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
-  if (roulettes.length) loadRouletteGames(select.value);
+  const hasRoulettes = roulettes.length > 0;
+  document.getElementById('roulettes-empty').classList.toggle('hidden', hasRoulettes);
+  document.querySelector('#tab-roulettes .row:has(#roulette-select)').classList.toggle('hidden', !hasRoulettes);
+  if (hasRoulettes) loadRouletteGames(select.value);
   else document.getElementById('roulette-games').innerHTML = '';
 }
 document.getElementById('roulette-select').addEventListener('change', (e) => loadRouletteGames(e.target.value));
@@ -173,6 +178,13 @@ async function loadRouletteGames(id) {
   const container = document.getElementById('roulette-games');
   const memberIds = new Set(roulette.games.map((g) => g.id));
   container.innerHTML = '<h3>Games in this roulette</h3>';
+  if (allGames.length === 0) {
+    container.innerHTML += '<p class="empty-state">No games in the pool yet. Add some in the Games tab first.</p>';
+    return;
+  }
+  if (memberIds.size === 0) {
+    container.innerHTML += '<p class="empty-state">No games added to this roulette yet — check the boxes below to add some.</p>';
+  }
   for (const g of allGames) {
     const chip = document.createElement('label');
     chip.className = 'game-chip';
@@ -206,11 +218,14 @@ document.getElementById('roulette-delete').onclick = async () => {
 // --- Players ---
 async function loadPlayers() {
   const players = await api('/players');
+  const leaderCount = players.filter((p) => p.role === 'leader').length;
   const tbody = document.querySelector('#players-table tbody');
   tbody.innerHTML = '';
+  document.getElementById('players-table').classList.toggle('hidden', players.length === 0);
+  document.getElementById('players-empty').classList.toggle('hidden', players.length > 0);
   for (const p of players) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td data-label="Name">${esc(p.name)}</td><td data-label="Skips left / quota"></td><td data-label="SteamID64">${esc(p.steam_id64)}</td><td></td>`;
+    tr.innerHTML = `<td data-label="Name">${esc(p.name)}${p.role === 'leader' ? ' 👑' : ''}</td><td data-label="Skips left / quota"></td><td data-label="SteamID64">${esc(p.steam_id64)}</td><td></td>`;
     const skipCell = tr.children[1];
     const skipCount = document.createElement('span');
     skipCount.textContent = `${p.skips_remaining} / ${p.skip_quota}`;
@@ -239,6 +254,24 @@ async function loadPlayers() {
     }
     const cell = tr.lastElementChild;
     if (currentUser?.role === 'leader') {
+      const roleBtn = document.createElement('button');
+      const isSoleLeader = p.role === 'leader' && leaderCount <= 1;
+      roleBtn.textContent = p.role === 'leader' ? 'Demote' : 'Promote to leader';
+      roleBtn.className = 'secondary';
+      roleBtn.disabled = isSoleLeader;
+      roleBtn.title = isSoleLeader ? "Can't demote the only leader" : '';
+      roleBtn.onclick = async () => {
+        try {
+          await api(`/players/${p.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ role: p.role === 'leader' ? 'member' : 'leader' }),
+          });
+        } catch (err) {
+          return alert(err.message);
+        }
+        loadPlayers();
+      };
+      cell.appendChild(roleBtn);
       if (p.steam_id64) {
         const importBtn = document.createElement('button');
         importBtn.textContent = 'Import Steam';
@@ -359,6 +392,10 @@ async function loadPlayRoulettes() {
   document.getElementById('play-roulette').innerHTML = roulettes
     .map((r) => `<option value="${r.id}">${esc(r.name)}</option>`)
     .join('');
+  document.getElementById('play-start').disabled = roulettes.length === 0;
+  if (roulettes.length === 0) {
+    document.getElementById('play-state').textContent = 'No roulettes yet — create one in the Roulettes tab and add some games to it first.';
+  }
 }
 
 // Polar point on a clock face: 0deg = top, clockwise. Matches the wheel's own
@@ -603,6 +640,7 @@ async function loadHistory() {
   const list = document.getElementById('history-list');
   list.innerHTML = '';
   document.getElementById('history-detail').innerHTML = '';
+  document.getElementById('history-empty').classList.toggle('hidden', matches.length > 0);
   for (const m of matches) {
     const item = document.createElement('div');
     item.className = `history-item status-${m.status}`;

@@ -104,6 +104,55 @@ describe('Players CRUD + skips', () => {
     assert.equal(update.status, 404);
   });
 
+  test('promotes a member to leader', async () => {
+    const create = await json('/api/players', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Seb' }),
+    });
+    const update = await json(`/api/players/${create.body.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role: 'leader' }),
+    });
+    assert.equal(update.status, 200);
+    assert.equal(update.body.role, 'leader');
+  });
+
+  test('demotes a leader back to member when another leader remains', async () => {
+    const create = await json('/api/players', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Seb' }),
+    });
+    await json(`/api/players/${create.body.id}`, { method: 'PUT', body: JSON.stringify({ role: 'leader' }) });
+    const update = await json(`/api/players/${create.body.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role: 'member' }),
+    });
+    assert.equal(update.status, 200);
+    assert.equal(update.body.role, 'member');
+  });
+
+  test('rejects demoting the sole remaining leader', async () => {
+    const leader = await json('/api/players');
+    const soleLeader = leader.body.find((p) => p.role === 'leader');
+    const update = await json(`/api/players/${soleLeader.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role: 'member' }),
+    });
+    assert.equal(update.status, 409);
+  });
+
+  test('rejects an invalid role value', async () => {
+    const create = await json('/api/players', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Seb' }),
+    });
+    const update = await json(`/api/players/${create.body.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role: 'admin' }),
+    });
+    assert.equal(update.status, 400);
+  });
+
   test('deletes a player', async () => {
     const create = await json('/api/players', {
       method: 'POST',

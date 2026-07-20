@@ -35,8 +35,21 @@ export function createApp(
   } = {}
 ) {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '100kb' }));
   app.use(express.static(fileURLToPath(new URL('../public', import.meta.url))));
+
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
+        "script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self'"
+    );
+    next();
+  });
 
   // --- Auth ---
 
@@ -65,6 +78,7 @@ export function createApp(
     const nonce = crypto.randomBytes(16).toString('hex');
     res.cookie(OAUTH_STATE_COOKIE, `${nonce}.${invite}`, {
       httpOnly: true,
+      secure: true,
       sameSite: 'lax',
       maxAge: 5 * 60 * 1000,
     });
@@ -136,6 +150,7 @@ export function createApp(
 
       res.cookie(SESSION_COOKIE, signSession(player.id, sessionSecret), {
         httpOnly: true,
+        secure: true,
         sameSite: 'lax',
         maxAge: SESSION_TTL_MS,
       });
@@ -281,9 +296,19 @@ export function createApp(
       const skip_quota = req.body?.skip_quota ?? existing.skip_quota;
       const steam_id64 = req.body?.steam_id64 ?? existing.steam_id64;
       const skips_remaining = req.body?.skips_remaining ?? existing.skips_remaining;
+      const role = req.body?.role ?? existing.role;
+      if (role !== 'leader' && role !== 'member') {
+        return res.status(400).json({ error: "role must be 'leader' or 'member'" });
+      }
+      if (existing.role === 'leader' && role === 'member') {
+        const { count } = await db.prepare("SELECT COUNT(*) AS count FROM players WHERE role = 'leader'").get();
+        if (count <= 1) {
+          return res.status(409).json({ error: 'cannot demote the only remaining leader' });
+        }
+      }
       await db
-        .prepare('UPDATE players SET name = ?, skip_quota = ?, steam_id64 = ?, skips_remaining = ? WHERE id = ?')
-        .run(name, skip_quota, steam_id64, skips_remaining, req.params.id);
+        .prepare('UPDATE players SET name = ?, skip_quota = ?, steam_id64 = ?, skips_remaining = ?, role = ? WHERE id = ?')
+        .run(name, skip_quota, steam_id64, skips_remaining, role, req.params.id);
       res.json(await db.prepare('SELECT * FROM players WHERE id = ?').get(req.params.id));
     })
   );
@@ -568,6 +593,9 @@ export function createApp(
       const { round_number, round_type } = await getRoundInfo(match);
 
       if (outcome === 'skip') {
+        if (req.player.role !== 'leader' && skip_used_by !== req.player.id) {
+          return res.status(403).json({ error: 'can only use your own skip' });
+        }
         const player = await db.prepare('SELECT * FROM players WHERE id = ?').get(skip_used_by);
         if (!player) {
           return res.status(400).json({ error: 'skip_used_by must be a valid player id' });

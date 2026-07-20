@@ -36,7 +36,7 @@
     <h1>Play</h1>
     <div class="row">
       <select id="play-roulette"></select>
-      <input id="play-rounds" type="number" min="0" value="2" style="width:4em" title="elimination rounds" />
+      <input id="play-rounds" type="number" min="0" value="2" class="narrow-num" title="elimination rounds" />
       <button id="play-start">Start Match</button>
     </div>
     <div id="play-state"></div>
@@ -59,6 +59,7 @@
       <button id="game-add">Add</button>
     </div>
     <table id="games-table"><thead><tr><th>Title</th><th>Steam AppID</th><th></th></tr></thead><tbody></tbody></table>
+    <p id="games-empty" class="empty-state hidden">No games added yet. Search Steam above or add one manually to get started.</p>
   </section>
 
   <section id="tab-roulettes" class="tab">
@@ -67,6 +68,7 @@
       <input id="roulette-name" placeholder="Name" />
       <button id="roulette-add">Add</button>
     </div>
+    <p id="roulettes-empty" class="empty-state hidden">No roulettes yet. Create one above to start picking games.</p>
     <div class="row">
       <select id="roulette-select"></select>
       <button id="roulette-delete" class="leader-only">Delete selected</button>
@@ -79,15 +81,17 @@
     <div class="row leader-only">
       <input id="player-name" placeholder="Name" />
       <input id="player-steamid" placeholder="SteamID64 (optional)" />
-      <input id="player-quota" type="number" min="0" value="1" style="width:4em" title="monthly skip quota" />
+      <input id="player-quota" type="number" min="0" value="1" class="narrow-num" title="monthly skip quota" />
       <button id="player-add">Add</button>
     </div>
     <table id="players-table"><thead><tr><th>Name</th><th>Skips left / quota</th><th>SteamID64</th><th></th></tr></thead><tbody></tbody></table>
+    <p id="players-empty" class="empty-state hidden">No players yet. Add one above to start tracking skips.</p>
   </section>
 
   <section id="tab-history" class="tab">
     <h1>History</h1>
     <div id="history-list"></div>
+    <p id="history-empty" class="empty-state hidden">No matches played yet. Head to the Play tab to spin your first roulette!</p>
     <div id="history-detail"></div>
   </section>
 </main>
