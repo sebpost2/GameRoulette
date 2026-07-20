@@ -39,14 +39,14 @@ cba4d49 Disable Vercel's Express auto-detection
 2591a6e Initial commit: Game Roulette
 ```
 
-Working tree is clean as of this handoff (no uncommitted changes). No GitHub remote configured. The `vercel --prod` deploy now includes the full lobby feature (backend + frontend, through `56730db`) — live at <https://game-roulette-psi.vercel.app> — that deploy predates the cancel/replay/share-link work below, redeploy when ready.
+Working tree is clean as of this handoff (no uncommitted changes). No GitHub remote configured. The `vercel --prod` deploy now includes the full lobby feature (backend + frontend, through `56730db`) — live at <https://game-roulette-psi.vercel.app>, now including the cancel/replay/share-link work below.
 
 ## Lobby cancel, replay, and share link
 
 Follow-up session after the lobby feature above. Three gaps the user reported after using the lobby: no way to cancel a match short of reloading, no way to start a new match after one completes without reloading, and no shareable link when opening a lobby.
 
 - **Backend**: `POST /api/matches/:id/cancel` (`src/app.js`), leader-only (`requireLeader`, mirrors other CRUD routes). Allowed from `'waiting'` or `'in_progress'`, sets `status = 'cancelled'`; 409 if already `'complete'`/`'cancelled'`, 404 if unknown. TDD'd in `test/match.test.js` (`Match cancel (leader-only)` describe block, 6 tests) — RED/GREEN checkpoint commits `d81acb3`/`daed42b`.
-- **Frontend** (`public/app.js` + `public/index.html`, uncommitted as of this note):
+- **Frontend** (`public/app.js` + `public/index.html`, commit `c9fa4a9`):
   - `#cancel-match-btn` — persistent button, leader-only (checked in JS via `isLeaderUser()`, not the global `.leader-only` class — that class is driven purely by role in `showApp()` and would fight with the match-status-based visibility here), shown whenever `currentMatch` is `waiting`/`in_progress`. Calls `resetPlayStage()` on confirm.
   - `resetPlayStage()` — the shared "back to setup" reset: stops lobby polling, clears `currentMatch`/`wheelGames`, re-shows `#play-setup`, hides `#play-lobby`/`.wheel-stage`/cancel button, reloads the roulette dropdown. Used by both cancel and the new "Play Another Roulette" button that `resolveMatch()` renders into `#play-actions` once `status === 'complete'`.
   - `#lobby-link` — leader-only, visible only in the lobby stage. Copies `${location.origin}/?match=<id>` to the clipboard (mirrors the existing `invite-btn` clipboard pattern).
