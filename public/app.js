@@ -461,7 +461,63 @@ document.getElementById('play-start').onclick = async () => {
   const elimination_rounds = Number(document.getElementById('play-rounds').value) || 0;
   if (!roulette_id) return alert('Create a roulette with games first.');
   currentMatch = await api('/matches', { method: 'POST', body: JSON.stringify({ roulette_id, elimination_rounds }) });
-  wheelGames = await loadWheelGamesForRoulette(roulette_id);
+  currentMatch = await api(`/matches/${currentMatch.id}`);
+  enterLobby();
+};
+
+let lobbyPollTimer = null;
+
+function enterLobby() {
+  document.getElementById('play-setup').classList.add('hidden');
+  document.getElementById('play-lobby').classList.remove('hidden');
+  document.querySelector('.wheel-stage').classList.add('hidden');
+  document.getElementById('play-actions').innerHTML = '';
+  document.getElementById('play-state').textContent = '';
+  renderLobby();
+  clearInterval(lobbyPollTimer);
+  lobbyPollTimer = setInterval(refreshLobby, 3000);
+}
+
+async function refreshLobby() {
+  currentMatch = await api(`/matches/${currentMatch.id}`);
+  if (currentMatch.status !== 'waiting') {
+    clearInterval(lobbyPollTimer);
+    return;
+  }
+  renderLobby();
+}
+
+function renderLobby() {
+  const list = document.getElementById('lobby-players');
+  list.innerHTML = currentMatch.players.length
+    ? currentMatch.players.map((p) => `<span class="game-chip">${esc(p.name)}${p.role === 'leader' ? ' 👑' : ''}</span>`).join('')
+    : '<p class="empty-state">No one has joined yet.</p>';
+  const joined = currentMatch.players.some((p) => p.id === currentUser.id);
+  document.getElementById('lobby-join').classList.toggle('hidden', joined);
+  document.getElementById('lobby-start').disabled = currentMatch.players.length === 0;
+}
+
+document.getElementById('lobby-join').onclick = async () => {
+  try {
+    await api(`/matches/${currentMatch.id}/join`, { method: 'POST' });
+  } catch (err) {
+    return alert(err.message);
+  }
+  currentMatch = await api(`/matches/${currentMatch.id}`);
+  renderLobby();
+};
+
+document.getElementById('lobby-start').onclick = async () => {
+  try {
+    await api(`/matches/${currentMatch.id}/start`, { method: 'POST' });
+  } catch (err) {
+    return alert(err.message);
+  }
+  clearInterval(lobbyPollTimer);
+  currentMatch = await api(`/matches/${currentMatch.id}`);
+  document.getElementById('play-lobby').classList.add('hidden');
+  document.querySelector('.wheel-stage').classList.remove('hidden');
+  wheelGames = await loadWheelGamesForRoulette(currentMatch.roulette_id);
   const wheel = document.getElementById('wheel');
   wheelRotation = 0;
   wheel.style.transition = 'none';
@@ -581,7 +637,9 @@ async function doSpin() {
 }
 
 async function loadPlayersForSkip() {
-  return api('/players');
+  const [players, match] = await Promise.all([api('/players'), api(`/matches/${currentMatch.id}`)]);
+  const joinedIds = new Set(match.players.map((p) => p.id));
+  return players.filter((p) => joinedIds.has(p.id));
 }
 
 async function renderResolveActions(spin) {

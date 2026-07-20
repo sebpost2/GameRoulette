@@ -34,13 +34,21 @@
 <main>
   <section id="tab-play" class="tab active">
     <h1>Play</h1>
-    <div class="row">
+    <div class="row" id="play-setup">
       <select id="play-roulette"></select>
       <input id="play-rounds" type="number" min="0" value="2" class="narrow-num" title="elimination rounds" />
-      <button id="play-start">Start Match</button>
+      <button id="play-start">Open Lobby</button>
+    </div>
+    <div id="play-lobby" class="hidden">
+      <h3>Lobby</h3>
+      <div id="lobby-players"></div>
+      <div class="row">
+        <button id="lobby-join">Join</button>
+        <button id="lobby-start">Start Game</button>
+      </div>
     </div>
     <div id="play-state"></div>
-    <div class="wheel-stage">
+    <div class="wheel-stage hidden">
       <div class="wheel-pointer"></div>
       <div id="wheel"></div>
       <div id="wheel-result" class="wheel-result"></div>
