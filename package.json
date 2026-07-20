@@ -1,0 +1,16 @@
+{
+  "name": "game-roulette",
+  "version": "1.0.0",
+  "description": "Shared game-picking roulette for a friend group",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "test": "node --test",
+    "test:coverage": "node --experimental-test-coverage --test"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4",
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Game Roulette</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B0%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div id="fx-overlay"></div>
+<div id="login-screen" class="hidden">
+  <h1>Game Roulette</h1>
+  <p>Ask your group leader for an invite link, or log in if you've joined before.</p>
+  <a id="login-link" href="/auth/discord">Login with Discord</a>
+</div>
+
+<div id="app-shell" class="hidden">
+<div id="auth-bar">
+  <img id="auth-avatar" alt="" />
+  <span id="auth-name"></span>
+  <button id="invite-btn" class="secondary leader-only hidden">Copy invite link</button>
+  <button id="logout-btn" class="secondary">Logout</button>
+</div>
+
+<nav>
+  <button data-tab="play" class="active">Play</button>
+  <button data-tab="games">Games</button>
+  <button data-tab="roulettes">Roulettes</button>
+  <button data-tab="players">Players</button>
+  <button data-tab="history">History</button>
+</nav>
+
+<main>
+  <section id="tab-play" class="tab active">
+    <h1>Play</h1>
+    <div class="row">
+      <select id="play-roulette"></select>
+      <input id="play-rounds" type="number" min="0" value="2" style="width:4em" title="elimination rounds" />
+      <button id="play-start">Start Match</button>
+    </div>
+    <div id="play-state"></div>
+    <div class="wheel-stage">
+      <div class="wheel-pointer"></div>
+      <div id="wheel"></div>
+      <div id="wheel-result" class="wheel-result"></div>
+    </div>
+    <div class="row" id="play-actions"></div>
+  </section>
+
+  <section id="tab-games" class="tab">
+    <h1>Games</h1>
+    <div class="row leader-only" style="position:relative">
+      <input id="game-search" placeholder="Search Steam (e.g. call of duty)..." autocomplete="off" />
+      <div id="game-search-results" class="search-results"></div>
+    </div>
+    <div class="row leader-only">
+      <input id="game-title" placeholder="Title" />
+      <button id="game-add">Add</button>
+    </div>
+    <table id="games-table"><thead><tr><th>Title</th><th>Steam AppID</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="tab-roulettes" class="tab">
+    <h1>Roulettes</h1>
+    <div class="row leader-only">
+      <input id="roulette-name" placeholder="Name" />
+      <button id="roulette-add">Add</button>
+    </div>
+    <div class="row">
+      <select id="roulette-select"></select>
+      <button id="roulette-delete" class="leader-only">Delete selected</button>
+    </div>
+    <div id="roulette-games"></div>
+  </section>
+
+  <section id="tab-players" class="tab">
+    <h1>Players</h1>
+    <div class="row leader-only">
+      <input id="player-name" placeholder="Name" />
+      <input id="player-steamid" placeholder="SteamID64 (optional)" />
+      <input id="player-quota" type="number" min="0" value="1" style="width:4em" title="monthly skip quota" />
+      <button id="player-add">Add</button>
+    </div>
+    <table id="players-table"><thead><tr><th>Name</th><th>Skips left / quota</th><th>SteamID64</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="tab-history" class="tab">
+    <h1>History</h1>
+    <div id="history-list"></div>
+    <div id="history-detail"></div>
+  </section>
+</main>
+</div>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>
