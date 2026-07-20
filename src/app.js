@@ -595,6 +595,22 @@ export function createApp(
   );
 
   app.post(
+    '/api/matches/:id/cancel',
+    requireLeader,
+    ah(async (req, res) => {
+      const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
+      if (!match) {
+        return res.status(404).json({ error: 'match not found' });
+      }
+      if (match.status === 'complete' || match.status === 'cancelled') {
+        return res.status(409).json({ error: 'match is already complete' });
+      }
+      await db.prepare("UPDATE matches SET status = 'cancelled' WHERE id = ?").run(match.id);
+      res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id));
+    })
+  );
+
+  app.post(
     '/api/matches/:id/spin',
     ah(async (req, res) => {
       const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
