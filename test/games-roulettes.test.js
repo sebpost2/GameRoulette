@@ -114,6 +114,7 @@ describe('Games CRUD', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.body.id, elimination_rounds: 0 }),
     });
+    await json(`/api/matches/${match.body.id}/start`, { method: 'POST' });
     await json(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
     await json(`/api/matches/${match.body.id}/resolve`, {
       method: 'POST',

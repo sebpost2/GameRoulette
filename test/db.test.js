@@ -20,6 +20,7 @@ describe('createDb', () => {
     assert.deepEqual(tables, [
       'games',
       'invites',
+      'match_players',
       'match_rounds',
       'matches',
       'player_games',

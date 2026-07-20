@@ -2,7 +2,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createDb } from '../src/db.js';
 import { createApp } from '../src/app.js';
-import { TEST_SESSION_SECRET, leaderCookie } from './helpers.js';
+import { TEST_SESSION_SECRET, leaderCookie, sessionCookieFor } from './helpers.js';
 
 let db;
 let server;
@@ -53,6 +53,7 @@ describe('Match history', () => {
         body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
       })
     ).body;
+    await jsonReq(`/api/matches/${match.id}/start`, { method: 'POST' });
 
     const list = await jsonReq('/api/matches');
     assert.equal(list.status, 200);
@@ -85,6 +86,11 @@ describe('Match history', () => {
         body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
       })
     ).body;
+    await jsonReq(`/api/matches/${match.id}/join`, {
+      method: 'POST',
+      headers: { cookie: sessionCookieFor(player.id) },
+    });
+    await jsonReq(`/api/matches/${match.id}/start`, { method: 'POST' });
 
     rngQueue = [0]; // pool [A, B] -> A
     await jsonReq(`/api/matches/${match.id}/spin`, { method: 'POST' });

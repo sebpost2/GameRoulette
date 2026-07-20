@@ -62,6 +62,17 @@ async function makePlayer(name, skip_quota = 1) {
   return res.body;
 }
 
+async function startMatch(matchId) {
+  return jsonReq(`/api/matches/${matchId}/start`, { method: 'POST' });
+}
+
+async function joinMatch(matchId, playerId) {
+  return jsonReq(`/api/matches/${matchId}/join`, {
+    method: 'POST',
+    headers: { cookie: sessionCookieFor(playerId) },
+  });
+}
+
 describe('Match engine', () => {
   test('runs a full 2-elimination-round match down to a final winner', async () => {
     const gA = await makeGame('Game A');
@@ -74,7 +85,8 @@ describe('Match engine', () => {
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 2 }),
     });
     assert.equal(match.status, 201);
-    assert.equal(match.body.status, 'in_progress');
+    assert.equal(match.body.status, 'waiting');
+    await startMatch(match.body.id);
 
     // Pool ordered by game id: [A, B, C]. rng=0 -> index 0 -> A.
     rngQueue = [0];
@@ -128,6 +140,8 @@ describe('Match engine', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
     });
+    await joinMatch(match.body.id, player.id);
+    await startMatch(match.body.id);
 
     rngQueue = [0];
     const spin1 = await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
@@ -159,6 +173,8 @@ describe('Match engine', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
     });
+    await joinMatch(match.body.id, player.id);
+    await startMatch(match.body.id);
     rngQueue = [0];
     await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
 
@@ -176,6 +192,7 @@ describe('Match engine', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
     });
+    await startMatch(match.body.id);
     rngQueue = [0];
     await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
 
@@ -194,6 +211,7 @@ describe('Match engine', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
     });
+    await startMatch(match.body.id);
     rngQueue = [0];
     await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
 
@@ -212,6 +230,7 @@ describe('Match engine', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
     });
+    await startMatch(match.body.id);
     rngQueue = [0];
     await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
 
@@ -226,6 +245,7 @@ describe('Match engine', () => {
       method: 'POST',
       body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
     });
+    await startMatch(match.body.id);
 
     const resolve = await jsonReq(`/api/matches/${match.body.id}/resolve`, {
       method: 'POST',

@@ -540,10 +540,57 @@ export function createApp(
       if (!Number.isInteger(elimination_rounds) || elimination_rounds < 0) {
         return res.status(400).json({ error: 'elimination_rounds must be a non-negative integer' });
       }
+      const now = new Date().toISOString();
       const result = await db
-        .prepare("INSERT INTO matches (roulette_id, created_at, elimination_rounds, status) VALUES (?, ?, ?, 'in_progress')")
-        .run(roulette_id, new Date().toISOString(), elimination_rounds);
+        .prepare("INSERT INTO matches (roulette_id, created_at, elimination_rounds, status) VALUES (?, ?, ?, 'waiting')")
+        .run(roulette_id, now, elimination_rounds);
+      await db
+        .prepare('INSERT INTO match_players (match_id, player_id, joined_at) VALUES (?, ?, ?)')
+        .run(result.lastInsertRowid, req.player.id, now);
       res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
+    })
+  );
+
+  app.post(
+    '/api/matches/:id/join',
+    ah(async (req, res) => {
+      const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
+      if (!match) {
+        return res.status(404).json({ error: 'match not found' });
+      }
+      if (match.status !== 'waiting') {
+        return res.status(409).json({ error: 'this match has already started' });
+      }
+      const already = await db
+        .prepare('SELECT 1 FROM match_players WHERE match_id = ? AND player_id = ?')
+        .get(match.id, req.player.id);
+      if (!already) {
+        await db
+          .prepare('INSERT INTO match_players (match_id, player_id, joined_at) VALUES (?, ?, ?)')
+          .run(match.id, req.player.id, new Date().toISOString());
+      }
+      res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id));
+    })
+  );
+
+  app.post(
+    '/api/matches/:id/start',
+    ah(async (req, res) => {
+      const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
+      if (!match) {
+        return res.status(404).json({ error: 'match not found' });
+      }
+      if (match.status !== 'waiting') {
+        return res.status(409).json({ error: 'this match has already started' });
+      }
+      const { count } = await db
+        .prepare('SELECT COUNT(*) AS count FROM match_players WHERE match_id = ?')
+        .get(match.id);
+      if (count < 1) {
+        return res.status(409).json({ error: 'at least one player must join before starting' });
+      }
+      await db.prepare("UPDATE matches SET status = 'in_progress' WHERE id = ?").run(match.id);
+      res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id));
     })
   );
 
@@ -553,6 +600,9 @@ export function createApp(
       const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
       if (!match) {
         return res.status(404).json({ error: 'match not found' });
+      }
+      if (match.status === 'waiting') {
+        return res.status(409).json({ error: 'start the match before spinning' });
       }
       if (match.status !== 'in_progress') {
         return res.status(409).json({ error: 'match is already complete' });
@@ -599,6 +649,12 @@ export function createApp(
         const player = await db.prepare('SELECT * FROM players WHERE id = ?').get(skip_used_by);
         if (!player) {
           return res.status(400).json({ error: 'skip_used_by must be a valid player id' });
+        }
+        const joined = await db
+          .prepare('SELECT 1 FROM match_players WHERE match_id = ? AND player_id = ?')
+          .get(match.id, player.id);
+        if (!joined) {
+          return res.status(400).json({ error: 'player did not join this match' });
         }
         await ensureSkipsCurrent(db, player.id);
         const current = await db.prepare('SELECT * FROM players WHERE id = ?').get(player.id);
@@ -689,7 +745,16 @@ export function createApp(
            ORDER BY mr.id`
         )
         .all(req.params.id);
-      res.json({ ...match, rounds });
+      const players = await db
+        .prepare(
+          `SELECT p.id, p.name, p.role
+           FROM match_players mp
+           JOIN players p ON p.id = mp.player_id
+           WHERE mp.match_id = ?
+           ORDER BY mp.joined_at`
+        )
+        .all(req.params.id);
+      res.json({ ...match, rounds, players });
     })
   );
 
