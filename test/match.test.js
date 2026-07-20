@@ -2,7 +2,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createDb } from '../src/db.js';
 import { createApp } from '../src/app.js';
-import { TEST_SESSION_SECRET, leaderCookie } from './helpers.js';
+import { TEST_SESSION_SECRET, leaderCookie, sessionCookieFor } from './helpers.js';
 
 let db;
 let server;
@@ -237,5 +237,135 @@ describe('Match engine', () => {
   test('returns 404 spinning for an unknown match', async () => {
     const res = await jsonReq('/api/matches/999/spin', { method: 'POST' });
     assert.equal(res.status, 404);
+  });
+});
+
+describe('Match lobby (join before start)', () => {
+  test('a new match starts in waiting status with its creator already joined', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Lobby', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    assert.equal(match.status, 201);
+    assert.equal(match.body.status, 'waiting');
+
+    const detail = await jsonReq(`/api/matches/${match.body.id}`);
+    assert.equal(detail.body.players.length, 1);
+  });
+
+  test('spinning before the match is started is rejected', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Lobby', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    const spin = await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
+    assert.equal(spin.status, 409);
+  });
+
+  test('a player can join a waiting match, and joining twice does not duplicate', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Lobby', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+
+    const join = await jsonReq(`/api/matches/${match.body.id}/join`, { method: 'POST' });
+    assert.equal(join.status, 200);
+    await jsonReq(`/api/matches/${match.body.id}/join`, { method: 'POST' });
+
+    const detail = await jsonReq(`/api/matches/${match.body.id}`);
+    assert.equal(detail.body.players.length, 1); // the leader cookie's own player, joined idempotently
+  });
+
+  test('rejects joining a match that already started', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Lobby', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    await jsonReq(`/api/matches/${match.body.id}/start`, { method: 'POST' });
+
+    const join = await jsonReq(`/api/matches/${match.body.id}/join`, { method: 'POST' });
+    assert.equal(join.status, 409);
+  });
+
+  test('starting a waiting match transitions it to in_progress and allows spinning', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Lobby', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+
+    const start = await jsonReq(`/api/matches/${match.body.id}/start`, { method: 'POST' });
+    assert.equal(start.status, 200);
+    assert.equal(start.body.status, 'in_progress');
+
+    rngQueue = [0];
+    const spin = await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
+    assert.equal(spin.status, 200);
+  });
+
+  test('rejects starting a match that already started', async () => {
+    const gA = await makeGame('Game A');
+    const roulette = await makeRoulette('Lobby', [gA.id]);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 0 }),
+    });
+    await jsonReq(`/api/matches/${match.body.id}/start`, { method: 'POST' });
+
+    const start2 = await jsonReq(`/api/matches/${match.body.id}/start`, { method: 'POST' });
+    assert.equal(start2.status, 409);
+  });
+
+  test('rejects a skip from a player who never joined the match', async () => {
+    const gA = await makeGame('Game A');
+    const gB = await makeGame('Game B');
+    const roulette = await makeRoulette('Lobby', [gA.id, gB.id]);
+    const outsider = await makePlayer('Outsider', 1);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
+    });
+    await jsonReq(`/api/matches/${match.body.id}/start`, { method: 'POST' });
+    rngQueue = [0];
+    await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
+
+    const skip = await jsonReq(`/api/matches/${match.body.id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome: 'skip', skip_used_by: outsider.id }),
+    });
+    assert.equal(skip.status, 400);
+  });
+
+  test('allows a skip from a player who joined the match', async () => {
+    const gA = await makeGame('Game A');
+    const gB = await makeGame('Game B');
+    const roulette = await makeRoulette('Lobby', [gA.id, gB.id]);
+    const joiner = await makePlayer('Joiner', 1);
+    const match = await jsonReq('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({ roulette_id: roulette.id, elimination_rounds: 1 }),
+    });
+    await jsonReq(`/api/matches/${match.body.id}/join`, {
+      method: 'POST',
+      headers: { cookie: sessionCookieFor(joiner.id) },
+    });
+    await jsonReq(`/api/matches/${match.body.id}/start`, { method: 'POST' });
+    rngQueue = [0];
+    await jsonReq(`/api/matches/${match.body.id}/spin`, { method: 'POST' });
+
+    const skip = await jsonReq(`/api/matches/${match.body.id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome: 'skip', skip_used_by: joiner.id }),
+    });
+    assert.equal(skip.status, 200);
   });
 });

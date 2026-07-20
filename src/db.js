@@ -59,6 +59,13 @@ CREATE TABLE IF NOT EXISTS matches (
   pending_game_id INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS match_players (
+  match_id INTEGER NOT NULL REFERENCES matches(id),
+  player_id INTEGER NOT NULL REFERENCES players(id),
+  joined_at TEXT NOT NULL,
+  PRIMARY KEY (match_id, player_id)
+);
+
 CREATE TABLE IF NOT EXISTS match_rounds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   match_id INTEGER NOT NULL REFERENCES matches(id),

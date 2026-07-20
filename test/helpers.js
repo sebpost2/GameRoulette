@@ -21,3 +21,7 @@ export async function leaderCookie(db, secret = TEST_SESSION_SECRET) {
   const id = await seedLeader(db);
   return `gr_session=${signSession(id, secret)}`;
 }
+
+export function sessionCookieFor(playerId, secret = TEST_SESSION_SECRET) {
+  return `gr_session=${signSession(playerId, secret)}`;
+}
